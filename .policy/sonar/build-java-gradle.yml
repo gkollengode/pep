@@ -1,0 +1,29 @@
+# Compile Java using Gradle (bytecode for Sonar Java rules)
+policy_build_java_gradle:
+  image: gradle:8-jdk17
+  stage: .pre
+  needs: ["policy_detect"]
+  rules:
+    - if: '$POLICY_DISABLE_SONAR == "1"'
+      when: never
+    - exists:
+        - "build.gradle"
+        - "build.gradle.kts"
+  script: |
+    set -euo pipefail
+    ./gradlew --no-daemon clean build test jacocoTestReport
+    echo "JAVA_BINARIES=build/classes/java/main" > build_java.env
+    if [ ! -d build/classes/java/main ]; then
+      classes=$(find . -type d -path "*/build/classes/java/main" | paste -sd "," -)
+      [ -n "$classes" ] && echo "JAVA_BINARIES=$classes" > build_java.env
+    fi
+    if [ -f build/reports/jacoco/test/jacocoTestReport.xml ]; then
+      echo "JACOCO_XML=build/reports/jacoco/test/jacocoTestReport.xml" >> build_java.env
+    fi
+  artifacts:
+    paths:
+      - build/classes/java/main
+      - build/libs/*.jar
+      - build/reports/jacoco/test/jacocoTestReport.xml
+    reports:
+      dotenv: build_java.env

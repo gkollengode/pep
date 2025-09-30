@@ -1,0 +1,23 @@
+# TruffleHog secret scan (filesystem) — runs on merge requests by default
+policy_trufflehog_scan:
+  image: ghcr.io/trufflesecurity/trufflehog:latest
+  stage: .pre
+  needs: ["policy_detect"]
+  rules:
+    - if: '$POLICY_DISABLE_SONAR == "1"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    TRUFFLEHOG_OUTPUT: "trufflehog-findings.json"
+    TRUFFLEHOG_STRICT: "0"
+  script: |
+    set -euo pipefail
+    trufflehog filesystem --no-update --json . | tee "$TRUFFLEHOG_OUTPUT" || true
+    if [ "${TRUFFLEHOG_STRICT}" = "1" ] && [ -s "$TRUFFLEHOG_OUTPUT" ]; then
+      echo "TruffleHog findings detected (strict mode)."
+      exit 1
+    fi
+  artifacts:
+    when: always
+    paths:
+      - trufflehog-findings.json

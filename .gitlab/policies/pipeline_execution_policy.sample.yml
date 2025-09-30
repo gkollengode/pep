@@ -1,0 +1,13 @@
+# Copy into Group → Security & Compliance → Policies → New → Pipeline execution policy
+type: pipeline_execution_policy
+name: Layered CI: Sonar + Security
+enabled: true
+rules:
+  - type: pipeline
+    branches: ["*"]
+pipeline_config_strategy: inject_policy
+content:
+  include:
+    - project: your-group/your-policy-project
+      ref: main
+      file: .policy/sonar/sonar-layer.yml

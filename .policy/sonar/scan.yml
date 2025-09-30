@@ -1,0 +1,43 @@
+# Run SonarQube scan (multi-language, Dockerfile included)
+policy_sonar_scan:
+  image: sonarsource/sonar-scanner-cli:5
+  stage: .pre
+  needs: ["policy_detect", "policy_build_node", "policy_build_java_gradle", "policy_build_java_maven"]
+  rules:
+    - if: '$POLICY_DISABLE_SONAR == "1"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    SONAR_HOST_URL: "https://sonar.example.com"
+  script: |
+    set -euo pipefail
+
+    # Optionally source File-type variable with secrets (SONAR_ENV_FILE)
+    if [ -n "${SONAR_ENV_FILE:-}" ] && [ -f "$SONAR_ENV_FILE" ]; then
+      set -a
+      . "$SONAR_ENV_FILE"
+      set +a
+    fi
+
+    FLAGS=(-Dsonar.host.url="${SONAR_HOST_URL}"
+           -Dsonar.login="${SONARQUBE_TOKEN}"
+           -Dsonar.projectKey="${SONAR_PROJECT_KEY:-$CI_PROJECT_PATH_SLUG}"
+           -Dsonar.sources="."
+           -Dsonar.inclusions="${SONAR_INCLUSIONS:-**/*}"
+           -Dsonar.docker.file.patterns="**/Dockerfile,**/Dockerfile.*,**/*.dockerfile"
+           -Dsonar.qualitygate.wait=true)
+
+    # Java coverage/bytecode if present
+    if [ -n "${JAVA_BINARIES:-}" ]; then
+      FLAGS+=(-Dsonar.java.binaries="${JAVA_BINARIES}")
+      if [ -n "${JACOCO_XML:-}" ] && [ -f "${JACOCO_XML}" ]; then
+        FLAGS+=(-Dsonar.coverage.jacoco.xmlReportPaths="${JACOCO_XML}")
+      fi
+    fi
+
+    # Node JS/TS coverage if available
+    if [ -n "${LCOV_FILE:-}" ] && [ -f "${LCOV_FILE}" ]; then
+      FLAGS+=(-Dsonar.javascript.lcov.reportPaths="${LCOV_FILE}")
+    fi
+
+    sonar-scanner "${FLAGS[@]}"

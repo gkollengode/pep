@@ -1,0 +1,24 @@
+# Compile Java using Maven (bytecode for Sonar Java rules)
+policy_build_java_maven:
+  image: maven:3-eclipse-temurin-17
+  stage: .pre
+  needs: ["policy_detect"]
+  rules:
+    - if: '$POLICY_DISABLE_SONAR == "1"'
+      when: never
+    - exists:
+        - "pom.xml"
+  script: |
+    set -euo pipefail
+    mvn -B -DskipTests=false clean package
+    echo "JAVA_BINARIES=target/classes" > build_java.env
+    if [ -f target/site/jacoco/jacoco.xml ]; then
+      echo "JACOCO_XML=target/site/jacoco/jacoco.xml" >> build_java.env
+    fi
+  artifacts:
+    paths:
+      - target/classes
+      - target/*.jar
+      - target/site/jacoco/jacoco.xml
+    reports:
+      dotenv: build_java.env

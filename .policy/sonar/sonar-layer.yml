@@ -1,0 +1,23 @@
+# Aggregator for Sonar + security layers (Node/Java + Trivy + TruffleHog)
+include:
+  - project: your-group/your-policy-project
+    ref: main
+    file: .policy/sonar/detect.yml
+  - project: your-group/your-policy-project
+    ref: main
+    file: .policy/node/build-node.yml
+  - project: your-group/your-policy-project
+    ref: main
+    file: .policy/sonar/build-java-gradle.yml
+  - project: your-group/your-policy-project
+    ref: main
+    file: .policy/sonar/build-java-maven.yml
+  - project: your-group/your-policy-project
+    ref: main
+    file: .policy/sonar/scan.yml
+  - project: your-group/your-policy-project
+    ref: main
+    file: .policy/trivy/scan.yml
+  - project: your-group/your-policy-project
+    ref: main
+    file: .policy/trufflehog/scan.yml

@@ -1,0 +1,63 @@
+# Detect languages + container hints and prepare SONAR_INCLUSIONS
+policy_detect:
+  image: debian:stable-slim
+  stage: .pre
+  rules:
+    - if: '$POLICY_DISABLE_SONAR == "1"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+  before_script:
+    - apt-get update -qq && apt-get install -y --no-install-recommends findutils grep coreutils bash ca-certificates && rm -rf /var/lib/apt/lists/*
+  script: |
+    set -euo pipefail
+    echo "# computed vars" > sonar_detect.env
+
+    # Container-based heuristics
+    if find . -maxdepth 3 -type f \( \
+         -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.dockerfile' -o -name 'Containerfile' -o \
+         -name 'docker-compose.yml' -o -name 'docker-compose.yaml' -o -name 'Chart.yaml' -o -name 'devcontainer.json' \
+       \) | grep -q . ; then
+      echo "IS_CONTAINER_BASED=1" >> sonar_detect.env
+    else
+      echo "IS_CONTAINER_BASED=0" >> sonar_detect.env
+    fi
+
+    # Language presence flags
+    has_java=0; has_js=0; has_ts=0; has_py=0; has_go=0; has_cs=0; has_rb=0
+    find . -type f -name '*.java' | grep -q . && has_java=1
+    [ -f pom.xml ] && has_java=1
+    find . -maxdepth 2 -type f \( -name 'build.gradle' -o -name 'build.gradle.kts' \) | grep -q . && has_java=1
+
+    find . -type f -name '*.ts' | grep -q . && has_ts=1
+    find . -type f -name '*.js' | grep -q . && has_js=1
+    find . -type f -name '*.py' | grep -q . && has_py=1
+    [ -f go.mod ] && has_go=1
+    find . -type f -name '*.go' | grep -q . && has_go=1
+    find . -type f \( -name '*.cs' -o -name '*.sln' -o -name '*.csproj' \) | grep -q . && has_cs=1
+    find . -type f \( -name '*.rb' -o -name 'Gemfile' \) | grep -q . && has_rb=1
+
+    echo "LANG_JAVA=$has_java" >> sonar_detect.env
+    echo "LANG_TS=$has_ts" >> sonar_detect.env
+    echo "LANG_JS=$has_js" >> sonar_detect.env
+    echo "LANG_PY=$has_py" >> sonar_detect.env
+    echo "LANG_GO=$has_go" >> sonar_detect.env
+    echo "LANG_CS=$has_cs" >> sonar_detect.env
+    echo "LANG_RB=$has_rb" >> sonar_detect.env
+
+    # Compose sonar.inclusions
+    inc=()
+    [ $has_java -eq 1 ] && inc+=("**/*.java")
+    [ $has_ts  -eq 1 ] && inc+=("**/*.ts")
+    [ $has_js  -eq 1 ] && inc+=("**/*.js")
+    [ $has_py  -eq 1 ] && inc+=("**/*.py")
+    [ $has_go  -eq 1 ] && inc+=("**/*.go")
+    [ $has_cs  -eq 1 ] && inc+=("**/*.cs")
+    [ $has_rb  -eq 1 ] && inc+=("**/*.rb")
+    IFS=, ; echo "SONAR_INCLUSIONS=${inc[*]:-**/*}" >> sonar_detect.env ; unset IFS
+
+    # Project key & default coverage path (Gradle)
+    echo "SONAR_PROJECT_KEY=${CI_PROJECT_PATH_SLUG}" >> sonar_detect.env
+    echo "JACOCO_XML=build/reports/jacoco/test/jacocoTestReport.xml" >> sonar_detect.env
+  artifacts:
+    reports:
+      dotenv: sonar_detect.env

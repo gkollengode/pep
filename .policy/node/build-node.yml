@@ -1,0 +1,52 @@
+# Prepare Node.js (npm/pnpm/yarn) and try to produce coverage/lcov.info
+policy_build_node:
+  image: node:20
+  stage: .pre
+  needs: ["policy_detect"]
+  rules:
+    - if: '$POLICY_DISABLE_SONAR == "1"'
+      when: never
+    - exists:
+        - "package.json"
+  script: |
+    set -euo pipefail
+    if [ -f package-lock.json ]; then PM=npm
+    elif [ -f pnpm-lock.yaml ]; then PM=pnpm
+    elif [ -f yarn.lock ]; then PM=yarn
+    else PM=npm
+    fi
+    echo "NODE_PM=$PM" > build_node.env
+
+    case "$PM" in
+      npm)
+        npm ci || npm install
+        npm run -s build --if-present || true
+        npm test -- --coverage || npm run -s test:coverage || true
+        ;;
+      pnpm)
+        corepack enable || true
+        pnpm i --frozen-lockfile || pnpm i
+        pnpm run -s build --if-present || true
+        pnpm run -s test -- --coverage || pnpm run -s test:coverage || true
+        ;;
+      yarn)
+        corepack enable || true
+        yarn install --frozen-lockfile || yarn install
+        yarn run -s build --if-present || true
+        yarn run -s test --coverage || yarn run -s test:coverage || true
+        ;;
+    esac
+
+    if [ -f coverage/lcov.info ]; then
+      echo "LCOV_FILE=coverage/lcov.info" >> build_node.env
+    else
+      lcov=$(find . -type f -name "lcov.info" | head -n1 || true)
+      [ -n "$lcov" ] && echo "LCOV_FILE=$lcov" >> build_node.env
+    fi
+  artifacts:
+    paths:
+      - coverage/
+      - build/
+      - dist/
+    reports:
+      dotenv: build_node.env

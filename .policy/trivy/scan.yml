@@ -1,0 +1,23 @@
+# Trivy config + filesystem scan — only when container-based
+policy_trivy_scan:
+  image: aquasec/trivy:latest
+  stage: .pre
+  needs: ["policy_detect"]
+  rules:
+    - if: '$POLICY_DISABLE_SONAR == "1"'
+      when: never
+    - if: '$IS_CONTAINER_BASED == "1"'
+  variables:
+    TRIVY_CACHE_DIR: ".trivycache"
+    TRIVY_SEVERITY: "MEDIUM,HIGH,CRITICAL"
+  script: |
+    set -euo pipefail
+    mkdir -p "$TRIVY_CACHE_DIR"
+    trivy config --no-progress --severity "$TRIVY_SEVERITY" --exit-code 0 --format table -o trivy-config.txt . || true
+    trivy fs --no-progress --severity "$TRIVY_SEVERITY" --exit-code 0 --format sarif -o trivy-fs.sarif . || true
+  artifacts:
+    when: always
+    paths:
+      - trivy-config.txt
+      - trivy-fs.sarif
+      - .trivycache/
